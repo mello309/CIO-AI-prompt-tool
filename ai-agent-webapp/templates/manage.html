@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Prompts - Gemini Prompt Runner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-plus me-2"></i>Add New Prompt</h4>
+            </div>
+            <div class="card-body">
+                <form id="addPromptForm">
+                    <div class="mb-3">
+                        <label for="promptId" class="form-label">Prompt ID</label>
+                        <input type="text" class="form-control" id="promptId" 
+                               placeholder="e.g., 'custom_analysis'" required>
+                        <div class="form-text">Unique identifier for this prompt (no spaces, use underscores)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="promptName" class="form-label">Prompt Name</label>
+                        <input type="text" class="form-control" id="promptName" 
+                               placeholder="e.g., 'Custom Code Analysis'" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="promptDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="promptDescription" rows="2" 
+                                  placeholder="Brief description of what this prompt does" required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="promptTemplate" class="form-label">Prompt Template</label>
+                        <textarea class="form-control" id="promptTemplate" rows="6" 
+                                  placeholder="Enter your prompt template. Use {user_input} as a placeholder for user input." required></textarea>
+                        <div class="form-text">Use <code>{user_input}</code> where you want the user's input to be inserted</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-2"></i>Add Prompt
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="alert alert-info mt-3" id="addPromptAlert" style="display: none;">
+            <i class="fas fa-info-circle me-2"></i>
+            <span id="addPromptMessage"></span>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list me-2"></i>Current Prompts</h5>
+            </div>
+            <div class="card-body">
+                {% for key, prompt in prompts.items() %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">{{ prompt.name }}</h6>
+                        <p class="card-text text-muted small">{{ prompt.description }}</p>
+                        <small class="text-muted">ID: <code>{{ key }}</code></small>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-lightbulb me-2"></i>Prompt Template Examples</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Code Review:</strong>
+                    <pre class="small bg-light p-2 mt-1">Please review the following code and provide feedback on:
+1. Potential bugs or issues
+2. Code quality and best practices
+3. Performance optimizations
+
+Code:
+{user_input}</pre>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Documentation:</strong>
+                    <pre class="small bg-light p-2 mt-1">Generate documentation for:
+1. Function descriptions
+2. Parameter explanations
+3. Usage examples
+
+Code:
+{user_input}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addPromptForm = document.getElementById('addPromptForm');
+    const addPromptAlert = document.getElementById('addPromptAlert');
+    const addPromptMessage = document.getElementById('addPromptMessage');
+    
+    addPromptForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const promptId = document.getElementById('promptId').value.trim();
+        const promptName = document.getElementById('promptName').value.trim();
+        const promptDescription = document.getElementById('promptDescription').value.trim();
+        const promptTemplate = document.getElementById('promptTemplate').value.trim();
+        
+        if (!promptId || !promptName || !promptDescription || !promptTemplate) {
+            showAlert('Please fill in all fields', 'danger');
+            return;
+        }
+        
+        if (!promptTemplate.includes('{user_input}')) {
+            showAlert('Prompt template must include {user_input} placeholder', 'warning');
+            return;
+        }
+        
+        // Make API request
+        fetch('/add_prompt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id: promptId,
+                name: promptName,
+                description: promptDescription,
+                prompt: promptTemplate
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Prompt added successfully! Refresh the page to see it in the list.', 'success');
+                addPromptForm.reset();
+            } else {
+                showAlert('Error: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('Error: ' + error.message, 'danger');
+        });
+    });
+    
+    function showAlert(message, type) {
+        addPromptMessage.textContent = message;
+        addPromptAlert.className = `alert alert-${type} mt-3`;
+        addPromptAlert.style.display = 'block';
+        
+        // Hide alert after 5 seconds
+        setTimeout(() => {
+            addPromptAlert.style.display = 'none';
+        }, 5000);
+    }
+});
+</script>
+{% endblock %}

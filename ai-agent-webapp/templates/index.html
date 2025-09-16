@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Gemini Prompt Runner{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4><i class="fas fa-play me-2"></i>Run a Prompt</h4>
+            </div>
+            <div class="card-body">
+                <form id="promptForm">
+                    <div class="mb-3">
+                        <label for="promptType" class="form-label">Select Prompt Type</label>
+                        <select class="form-select" id="promptType" required>
+                            <option value="">Choose a prompt...</option>
+                            {% for key, prompt in prompts.items() %}
+                            <option value="{{ key }}" data-description="{{ prompt.description }}">
+                                {{ prompt.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text" id="promptDescription"></div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="userInput" class="form-label">Your Input</label>
+                        <textarea class="form-control" id="userInput" rows="8" 
+                                  placeholder="Enter your code, text, or question here..." required></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="csvFile" class="form-label">Or Upload CSV File</label>
+                        <input type="file" class="form-control" id="csvFile" accept=".csv">
+                        <div class="form-text">Upload a CSV file to use with CSV analysis prompts</div>
+                    </div>
+                    
+                    <div class="mb-3" id="uploadedFilesSection" style="display: none;">
+                        <label class="form-label">Available CSV Files</label>
+                        <select class="form-select" id="csvFileSelect">
+                            <option value="">Select a CSV file...</option>
+                        </select>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="loadCsvBtn" style="display: none;">
+                            <i class="fas fa-upload me-1"></i>Load CSV Data
+                        </button>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-rocket me-2"></i>Run Prompt
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-4" id="responseCard" style="display: none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-brain me-2"></i>Gemini Response</h5>
+                <div id="feedbackSection" style="display: none;">
+                    <small class="text-muted me-2">Rate this response:</small>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-danger" onclick="submitFeedback(1)">1</button>
+                        <button type="button" class="btn btn-outline-warning" onclick="submitFeedback(2)">2</button>
+                        <button type="button" class="btn btn-outline-warning" onclick="submitFeedback(3)">3</button>
+                        <button type="button" class="btn btn-outline-success" onclick="submitFeedback(4)">4</button>
+                        <button type="button" class="btn btn-outline-success" onclick="submitFeedback(5)">5</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="loading" id="loading">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Generating response...</p>
+                    </div>
+                </div>
+                <div class="response-area" id="responseArea"></div>
+                <div class="mt-3" id="feedbackForm" style="display: none;">
+                    <textarea class="form-control" id="feedbackText" rows="2" placeholder="Optional: Tell us how we can improve..."></textarea>
+                    <button type="button" class="btn btn-sm btn-primary mt-2" onclick="submitDetailedFeedback()">Submit Feedback</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-4" id="conversationCard" style="display: none;">
+            <div class="card-header">
+                <h5><i class="fas fa-history me-2"></i>Conversation History</h5>
+            </div>
+            <div class="card-body">
+                <div id="conversationHistory"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list me-2"></i>Available Prompts</h5>
+            </div>
+            <div class="card-body">
+                {% for key, prompt in prompts.items() %}
+                <div class="prompt-card card mb-3" onclick="selectPrompt('{{ key }}')">
+                    <div class="card-body">
+                        <h6 class="card-title">{{ prompt.name }}</h6>
+                        <p class="card-text text-muted small">{{ prompt.description }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        {% if uploaded_files %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-file-csv me-2"></i>Uploaded CSV Files</h6>
+            </div>
+            <div class="card-body">
+                {% for filename, file_info in uploaded_files.items() %}
+                <div class="mb-2 p-2 border rounded">
+                    <small class="text-muted">{{ file_info.original_name }}</small><br>
+                    <small class="text-muted">{{ file_info.rows }} rows, {{ file_info.columns|length }} columns</small><br>
+                    <small class="text-muted">{{ file_info.upload_time }}</small>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-memory me-2"></i>Memory & Learning</h6>
+            </div>
+            <div class="card-body">
+                <div id="memoryStats">
+                    <div class="mb-2">
+                        <small class="text-muted">Session Conversations:</small>
+                        <span class="badge bg-primary" id="sessionCount">0</span>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Total Conversations:</small>
+                        <span class="badge bg-info" id="totalCount">0</span>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">Feedback Given:</small>
+                        <span class="badge bg-success" id="feedbackCount">0</span>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="loadConversationHistory()">
+                    <i class="fas fa-history me-1"></i>View History
+                </button>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6><i class="fas fa-info-circle me-2"></i>Quick Tips</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled small">
+                    <li><i class="fas fa-check text-success me-2"></i>Select a prompt type first</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Provide clear, specific input</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Upload CSV files for data analysis</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Rate responses to help AI learn</li>
+                    <li><i class="fas fa-check text-success me-2"></i>Results may take a few seconds</li>
+                    <li><i class="fas fa-check text-success me-2"></i>You can manage prompts in the settings</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const promptTypeSelect = document.getElementById('promptType');
+    const promptDescription = document.getElementById('promptDescription');
+    const promptForm = document.getElementById('promptForm');
+    const responseCard = document.getElementById('responseCard');
+    const loading = document.getElementById('loading');
+    const responseArea = document.getElementById('responseArea');
+    const csvFileInput = document.getElementById('csvFile');
+    const uploadedFilesSection = document.getElementById('uploadedFilesSection');
+    const csvFileSelect = document.getElementById('csvFileSelect');
+    const loadCsvBtn = document.getElementById('loadCsvBtn');
+    const userInput = document.getElementById('userInput');
+    const feedbackSection = document.getElementById('feedbackSection');
+    const feedbackForm = document.getElementById('feedbackForm');
+    const conversationCard = document.getElementById('conversationCard');
+    
+    // Global variables for memory
+    let currentPromptType = '';
+    let currentSessionId = '';
+    
+    // Update description when prompt type changes
+    promptTypeSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (selectedOption.value) {
+            promptDescription.textContent = selectedOption.dataset.description;
+        } else {
+            promptDescription.textContent = '';
+        }
+    });
+    
+    // Handle CSV file upload
+    csvFileInput.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file && file.name.toLowerCase().endsWith('.csv')) {
+            uploadCSV(file);
+        } else {
+            alert('Please select a CSV file');
+        }
+    });
+    
+    // Handle CSV file selection
+    csvFileSelect.addEventListener('change', function() {
+        if (this.value) {
+            loadCsvBtn.style.display = 'inline-block';
+        } else {
+            loadCsvBtn.style.display = 'none';
+        }
+    });
+    
+    // Load CSV data into textarea
+    loadCsvBtn.addEventListener('click', function() {
+        const filename = csvFileSelect.value;
+        if (filename) {
+            loadCSVData(filename);
+        }
+    });
+    
+    // Upload CSV file
+    function uploadCSV(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        fetch('/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                updateFileList();
+                // Auto-select the uploaded file
+                csvFileSelect.value = data.filename;
+                loadCsvBtn.style.display = 'inline-block';
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error uploading file: ' + error.message);
+        });
+    }
+    
+    // Load CSV data
+    function loadCSVData(filename) {
+        fetch(`/file/${filename}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                userInput.value = data.data;
+                alert(`Loaded ${data.rows} rows from ${filename}`);
+            } else {
+                alert('Error loading file: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error loading file: ' + error.message);
+        });
+    }
+    
+    // Update file list
+    function updateFileList() {
+        fetch('/files')
+        .then(response => response.json())
+        .then(data => {
+            csvFileSelect.innerHTML = '<option value="">Select a CSV file...</option>';
+            Object.keys(data).forEach(filename => {
+                const option = document.createElement('option');
+                option.value = filename;
+                option.textContent = data[filename].original_name;
+                csvFileSelect.appendChild(option);
+            });
+            
+            if (Object.keys(data).length > 0) {
+                uploadedFilesSection.style.display = 'block';
+            }
+        });
+    }
+    
+    // Initialize file list
+    updateFileList();
+    
+    // Load initial memory stats
+    loadMemoryStats();
+    
+    // Handle form submission
+    promptForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const promptType = promptTypeSelect.value;
+        const userInput = document.getElementById('userInput').value;
+        
+        if (!promptType || !userInput.trim()) {
+            alert('Please select a prompt type and provide input');
+            return;
+        }
+        
+        // Store current prompt type for feedback
+        currentPromptType = promptType;
+        
+        // Show response card and loading
+        responseCard.style.display = 'block';
+        loading.classList.add('show');
+        responseArea.innerHTML = '';
+        
+        // Make API request
+        fetch('/run_prompt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt_type: promptType,
+                user_input: userInput
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            loading.classList.remove('show');
+            if (data.success) {
+                responseArea.innerHTML = `<div class="alert alert-success"><strong>${data.prompt_name}</strong></div><pre style="white-space: pre-wrap; font-family: inherit;">${data.response}</pre>`;
+                feedbackSection.style.display = 'block';
+                currentSessionId = data.session_id;
+                updateMemoryStats(data.conversation_count);
+            } else {
+                responseArea.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            loading.classList.remove('show');
+            responseArea.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+        });
+    });
+});
+
+function selectPrompt(promptKey) {
+    document.getElementById('promptType').value = promptKey;
+    document.getElementById('promptType').dispatchEvent(new Event('change'));
+    document.getElementById('userInput').focus();
+}
+
+// Memory and feedback functions
+function submitFeedback(score) {
+    if (!currentPromptType) return;
+    
+    fetch('/feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            prompt_type: currentPromptType,
+            score: score,
+            feedback_text: ''
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Thank you for your feedback!');
+            feedbackForm.style.display = 'none';
+            loadMemoryStats();
+        } else {
+            alert('Error submitting feedback: ' + data.error);
+        }
+    });
+}
+
+function submitDetailedFeedback() {
+    const feedbackText = document.getElementById('feedbackText').value;
+    if (!currentPromptType) return;
+    
+    fetch('/feedback', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            prompt_type: currentPromptType,
+            score: 0, // Will be set by user
+            feedback_text: feedbackText
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Thank you for your detailed feedback!');
+            feedbackForm.style.display = 'none';
+            document.getElementById('feedbackText').value = '';
+            loadMemoryStats();
+        } else {
+            alert('Error submitting feedback: ' + data.error);
+        }
+    });
+}
+
+function updateMemoryStats(sessionCount) {
+    document.getElementById('sessionCount').textContent = sessionCount;
+}
+
+function loadMemoryStats() {
+    fetch('/memory_stats')
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('totalCount').textContent = data.total_conversations;
+        document.getElementById('feedbackCount').textContent = data.feedback_count;
+    });
+}
+
+function loadConversationHistory() {
+    fetch('/conversation_history')
+    .then(response => response.json())
+    .then(data => {
+        const historyDiv = document.getElementById('conversationHistory');
+        if (data.conversations.length === 0) {
+            historyDiv.innerHTML = '<p class="text-muted">No conversation history yet.</p>';
+        } else {
+            let html = '';
+            data.conversations.slice(-5).reverse().forEach(conv => {
+                html += `
+                    <div class="mb-3 p-2 border rounded">
+                        <small class="text-muted">${conv.timestamp}</small><br>
+                        <strong>${conv.prompt_type}</strong><br>
+                        <small>${conv.user_input.substring(0, 100)}...</small>
+                    </div>
+                `;
+            });
+            historyDiv.innerHTML = html;
+        }
+        conversationCard.style.display = 'block';
+    });
+}
+</script>
+{% endblock %}
